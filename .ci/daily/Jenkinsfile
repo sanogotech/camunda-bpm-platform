@@ -5,7 +5,11 @@
 def failedStageTypes = []
 
 pipeline {
-  agent none
+  agent {
+    node {
+      label 'jenkins-job-runner'
+    }
+  }
   parameters {
     booleanParam name: 'STANDALONE', defaultValue: true
     booleanParam name: 'UPSTREAM_PR', defaultValue: false, description: 'Is the current build triggered in the scope of an upstream pull request'
@@ -27,11 +31,8 @@ pipeline {
         }
         beforeAgent true
       }
-      agent {
-        label 'centos-stable'
-      }
       steps {
-        cambpmConditionalRetry {
+        cambpmConditionalRetry(agentLabel: 'centos-stable') {
           cambpmCopyArtifacts(params.UPSTREAM_PROJECT_NAME, params.UPSTREAM_BUILD_NUMBER)
           cambpmStash("platform-stash-runtime",
                       ".m2/org/camunda/**/*-SNAPSHOT/**",
@@ -43,11 +44,8 @@ pipeline {
       }
     }
     stage('check-sql-scripts') {
-      agent {
-        label 'centos-stable'
-      }
       steps {
-        cambpmConditionalRetry {
+        cambpmConditionalRetry(agentLabel: 'centos-stable') {
           sh '.ci/scripts/check-sql-scripts.sh'
         }
       }
@@ -61,11 +59,8 @@ pipeline {
             }
             beforeAgent true
           }
-          agent {
-            label 'h2'
-          }
           steps {
-            cambpmConditionalRetry {
+            cambpmConditionalRetry(agentLabel: 'h2') {
               cambpmRunMavenByStageType('sql-scripts', 'h2')
             }
           }
@@ -80,11 +75,8 @@ pipeline {
             branch cambpmDefaultBranch();
             beforeAgent true
           }
-          agent {
-            label 'h2'
-          }
           steps {
-            cambpmConditionalRetry {
+            cambpmConditionalRetry(agentLabel: 'h2') {
               cambpmRunMaven('distro/wildfly/subsystem', 'test', runtimeStash: true)
             }
           }
@@ -101,11 +93,8 @@ pipeline {
             }
             beforeAgent true
           }
-          agent {
-            label 'h2'
-          }
           steps {
-            cambpmConditionalRetry {
+            cambpmConditionalRetry(agentLabel: 'h2') {
               cambpmRunMavenByStageType('upgrade-database', 'h2')
             }
           }
@@ -125,11 +114,8 @@ pipeline {
             }
             beforeAgent true
           }
-          agent {
-            label 'h2'
-          }
           steps {
-            cambpmConditionalRetry {
+            cambpmConditionalRetry(agentLabel: 'h2') {
               cambpmRunMavenByStageType('instance-migration', 'h2')
             }
           }
@@ -149,11 +135,8 @@ pipeline {
             }
             beforeAgent true
           }
-          agent {
-            label 'h2'
-          }
           steps {
-            cambpmConditionalRetry {
+            cambpmConditionalRetry(agentLabel: 'h2') {
               cambpmRunMavenByStageType('old-engine', 'h2')
             }
           }
@@ -173,11 +156,8 @@ pipeline {
             }
             beforeAgent true
           }
-          agent {
-            label 'h2'
-          }
           steps {
-            cambpmConditionalRetry {
+            cambpmConditionalRetry(agentLabel: 'h2') {
               cambpmRunMavenByStageType('rolling-update', 'h2')
             }
           }
@@ -195,11 +175,8 @@ pipeline {
             branch cambpmDefaultBranch();
             beforeAgent true
           }
-          agent {
-            label 'h2'
-          }
           steps {
-            cambpmConditionalRetry {
+            cambpmConditionalRetry(agentLabel: 'h2') {
               cambpmRunMavenByStageType('large-data-tests', 'h2')
             }
           }
@@ -215,9 +192,6 @@ pipeline {
       }
     }
     stage('QA DB tests') {
-      agent {
-        label 'centos'
-      }
       steps {
         script {
           parallel(cambpmGetMatrixStages('daily-stages', failedStageTypes, { allowedStageLabels, dbLabel ->
@@ -242,13 +216,10 @@ pipeline {
           }
           beforeAgent true
         }
-        agent {
-          label 'h2'
-        }
         stages {
           stage('JDK') {
             steps {
-              cambpmConditionalRetry {
+              cambpmConditionalRetry(agentLabel: 'h2') {
                 cambpmRunMaven('.',
                     'install source:jar source:test-jar -pl \'!webapps\',\'!distro/jbossas7/subsystem\' -Pdistro,distro-ce,distro-wildfly',
                     jdkVersion: env.JDK,
@@ -270,13 +241,6 @@ pipeline {
       script {
         if (!agentDisconnected()){
           cambpmSendEmailNotification()
-        }
-      }
-    }
-    always {
-      script {
-        if (agentDisconnected()) {// Retrigger the build if the slave disconnected
-          build job: currentBuild.projectName, propagate: false, quietPeriod: 60, wait: false
         }
       }
     }

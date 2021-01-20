@@ -31,7 +31,11 @@ boolean shouldTrigger(String stageType) {
 }
 
 pipeline {
-  agent none
+  agent {
+    node {
+      label 'jenkins-job-runner'
+    }
+  }
   parameters {
     booleanParam name: 'STANDALONE', defaultValue: true
     booleanParam name: 'UPSTREAM_PR', defaultValue: false, description: 'Is the current build triggered in the scope of an upstream pull request'
@@ -53,11 +57,8 @@ pipeline {
         }
         beforeAgent true
       }
-      agent {
-        label 'centos-stable'
-      }
       steps {
-        cambpmConditionalRetry {
+        cambpmConditionalRetry(agentLabel: 'centos-stable') {
           cambpmCopyArtifacts(params.UPSTREAM_PROJECT_NAME, params.UPSTREAM_BUILD_NUMBER)
           cambpmStash("platform-stash-runtime",
                       ".m2/org/camunda/**/*-SNAPSHOT/**",
@@ -86,13 +87,10 @@ pipeline {
             shouldTrigger(env.STAGE_TYPE)
           }
         }
-        agent {
-          label env.DB
-        }
         stages {
           stage('UNIT test') {
             steps {
-              cambpmConditionalRetry {
+              cambpmConditionalRetry(agentLabel: env.DB) {
                 echo("UNIT DB Test Stage: ${env.STAGE_TYPE}-${env.DB}")
                 cambpmRunMavenByStageType(env.STAGE_TYPE, env.DB)
               }
@@ -116,13 +114,6 @@ pipeline {
       script {
         if (!agentDisconnected()){
           cambpmSendEmailNotification()
-        }
-      }
-    }
-    always {
-      script {
-        if (agentDisconnected()) {// Retrigger the build if the slave disconnected
-          build job: currentBuild.projectName, propagate: false, quietPeriod: 60, wait: false
         }
       }
     }
